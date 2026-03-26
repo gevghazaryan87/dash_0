@@ -1,10 +1,11 @@
 {
   "name": "result",
   "version": "1.0.0",
-  "description": "",
+  "description": "result service with otel",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node -r ./otel.js server.js",
+    "debug": "node -r ./otel.js --inspect=0.0.0.0 server.js"
   },
   "author": "",
   "license": "MIT",
@@ -15,6 +16,9 @@
     "method-override": "^3.0.0",
     "pg": "^8.8.0",
     "socket.io": "^4.7.2",
-    "stoppable": "^1.1.0"
+    "stoppable": "^1.1.0",
+    "@opentelemetry/sdk-node": "0.214.0",
+    "@opentelemetry/auto-instrumentations-node": "0.72.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.214.0"
   }
 }

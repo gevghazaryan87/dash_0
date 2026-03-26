@@ -4,20 +4,20 @@
 
 services:
   vote:
-    build: 
+    build:
       context: ./vote
       target: dev
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck: 
-      test: ["CMD", "curl", "-f", "http://localhost"]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost" ]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 10s
     volumes:
-     - ./vote:/usr/local/app
+      - ./vote:/usr/local/app
     ports:
       - "8080:80"
     networks:
@@ -26,28 +26,32 @@ services:
 
   result:
     build: ./result
-    # use nodemon rather than node for local dev
-    entrypoint: nodemon --inspect=0.0.0.0 server.js
+    # Use the 'start' script which now includes -r ./otel.js
+    command: npm start
     depends_on:
       db:
-        condition: service_healthy 
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     volumes:
       - ./result:/usr/local/app
     ports:
       - "8081:80"
-      - "127.0.0.1:9229:9229"
     networks:
       - front-tier
       - back-tier
+    environment:
+      OTEL_SERVICE_NAME: result-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
 
   worker:
     build:
       context: ./worker
     depends_on:
       redis:
-        condition: service_healthy 
+        condition: service_healthy
       db:
-        condition: service_healthy 
+        condition: service_healthy
     networks:
       - back-tier
 
@@ -75,21 +79,47 @@ services:
     networks:
       - back-tier
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: [ "--config", "/etc/otel/otel-collector-config.yaml" ]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - "./otel/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml"
+    networks:
+      - back-tier
+    restart: unless-stopped
+
   # this service runs once to seed the database with votes
   # it won't run unless you specify the "seed" profile
   # docker compose --profile seed up -d
   seed:
     build: ./seed-data
-    profiles: ["seed"]
+    profiles: [ "seed" ]
     depends_on:
       vote:
-        condition: service_healthy 
+        condition: service_healthy
     networks:
       - front-tier
     restart: "no"
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.3
+    container_name: clickhouse
+    ports:
+      - "8123:8123" # HTTP interface (for OTEL HTTP exporter)
+      - "9000:9000" # native TCP interface
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - back-tier
+
 volumes:
   db-data:
+  clickhouse-data:
+
 
 networks:
   front-tier:
