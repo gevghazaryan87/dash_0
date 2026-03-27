@@ -6,23 +6,26 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-processors:d
-  batch:
-
 exporters:
-  debug:
-    verbosity: basic
-  otlp_http:
-    endpoint: "http://clickhouse:8123/v1/traces"
+  # This replaces the otlp_http block
+  clickhouse:
+    endpoint: "tcp://clickhouse:9000?database=default"
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
 
 service:
+  telemetry:
+    logs:
+      level: "warn" # This keeps your terminal quiet
   pipelines:
     traces:
-      # These must match the names defined above exactly
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug, otlp_http]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug, otlp_http]
+      # Tell the pipeline to use the clickhouse exporter
+      exporters: [clickhouse]

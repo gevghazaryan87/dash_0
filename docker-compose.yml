@@ -18,6 +18,13 @@ services:
       start_period: 10s
     volumes:
       - ./vote:/usr/local/app
+    environment:
+      - OTEL_SERVICE_NAME=vote-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf # Add this line
+      - OTEL_PYTHON_FLASK_EXCLUDED_URLS=health,static
+      # Optional: captures the actual SQL/Redis queries in the spans
+      - OTEL_PYTHON_INSTRUMENTATION_HTTP_CAPTURE_HEADERS=server_request
     ports:
       - "8080:80"
     networks:
@@ -42,7 +49,7 @@ services:
       - back-tier
     environment:
       OTEL_SERVICE_NAME: result-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
 
   worker:
     build:
@@ -88,6 +95,9 @@ services:
       - "4318:4318"
     volumes:
       - "./otel/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     networks:
       - back-tier
     restart: unless-stopped
@@ -106,13 +116,23 @@ services:
     restart: "no"
 
   clickhouse:
-    image: clickhouse/clickhouse-server:23.3
+    image: clickhouse/clickhouse-server:latest
     container_name: clickhouse
     ports:
-      - "8123:8123" # HTTP interface (for OTEL HTTP exporter)
-      - "9000:9000" # native TCP interface
+      - "8123:8123" # HTTP interface & ClickStack UI
+      - "9000:9000" # Native TCP interface
     volumes:
-      - clickhouse-data:/var/lib/clickhouse
+      - ./ch_data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 # Allows the UI to manage users
+      - CLICKHOUSE_USER=default # Explicitly sets the admin user
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "localhost:8123/ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - back-tier
 
