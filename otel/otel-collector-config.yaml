@@ -12,7 +12,7 @@ receivers:
     endpoint: "db:5432"
     transport: tcp
     username: postgres
-    password: ${POSTGRES_PASSWORD}
+    password: postgres
 
 exporters:
   # This replaces the otlp_http block
