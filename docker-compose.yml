@@ -64,10 +64,8 @@ services:
 
   redis:
     image: redis:alpine
-    volumes:
-      - "./healthchecks:/healthchecks"
     healthcheck:
-      test: /healthchecks/redis.sh
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
       interval: "5s"
     networks:
       - back-tier
@@ -79,9 +77,8 @@ services:
       POSTGRES_PASSWORD: "postgres"
     volumes:
       - "db-data:/var/lib/postgresql/data"
-      - "./healthchecks:/healthchecks"
     healthcheck:
-      test: /healthchecks/postgres.sh
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: "5s"
     networks:
       - back-tier
@@ -122,7 +119,7 @@ services:
       - "8123:8123" # HTTP interface & ClickStack UI
       - "9000:9000" # Native TCP interface
     volumes:
-      - ./ch_data:/var/lib/clickhouse
+      - clickhouse-data:/var/lib/clickhouse
     environment:
       - CLICKHOUSE_DB=default
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 # Allows the UI to manage users
