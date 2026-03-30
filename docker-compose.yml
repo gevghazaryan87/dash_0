@@ -42,14 +42,15 @@ services:
         condition: service_started
     volumes:
       - ./result:/usr/local/app
+    environment:
+      OTEL_SERVICE_NAME: result-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318/v1/traces"
+
     ports:
       - "8081:80"
     networks:
       - front-tier
       - back-tier
-    environment:
-      OTEL_SERVICE_NAME: result-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
 
   worker:
     build:
@@ -59,13 +60,22 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+    environment:
+      - OTEL_SERVICE_NAME=worker-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf # .NET default
+      # --- The "Magic" Profiler Settings ---
+      - CORECLR_ENABLE_PROFILING=1
+      - CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
+      - OTEL_DOTNET_AUTO_HOME=/otel-dotnet-auto
+      - DOTNET_STARTUP_HOOKS=/otel-dotnet-auto/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
     networks:
       - back-tier
 
   redis:
     image: redis:alpine
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
       interval: "5s"
     networks:
       - back-tier
@@ -78,7 +88,7 @@ services:
     volumes:
       - "db-data:/var/lib/postgresql/data"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: "5s"
     networks:
       - back-tier

@@ -5,6 +5,14 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+  redis:
+    endpoint: "redis:6379"
+    collection_interval: 10s
+  postgresql:
+    endpoint: "db:5432"
+    transport: tcp
+    username: postgres
+    password: ${POSTGRES_PASSWORD}
 
 exporters:
   # This replaces the otlp_http block
@@ -13,6 +21,8 @@ exporters:
     timeout: 10s
     retry_on_failure:
       enabled: true
+  debug:
+    verbosity: detailed
 
 processors:
   batch:
@@ -28,4 +38,9 @@ service:
       receivers: [otlp]
       processors: [batch]
       # Tell the pipeline to use the clickhouse exporter
-      exporters: [clickhouse]
+      exporters: [clickhouse, debug]
+    metrics:
+      receivers: [otlp, redis, postgresql]
+      processors: [batch]
+      exporters: [clickhouse, debug]
+      
