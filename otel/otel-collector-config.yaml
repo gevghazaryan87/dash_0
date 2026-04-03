@@ -10,9 +10,14 @@ receivers:
     collection_interval: 10s
   postgresql:
     endpoint: "db:5432"
-    transport: tcp
-    username: postgres
-    password: postgres
+    username: otel_metrics
+    password: "your_secure_password"  # Ensure this matches your DB password
+    databases:
+      - postgres
+    collection_interval: 10s
+    # This block is the specific fix for the SSL error in your logs
+    tls:
+      insecure: true
 
 exporters:
   # This replaces the otlp_http block

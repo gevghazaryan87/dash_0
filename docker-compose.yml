@@ -33,7 +33,6 @@ services:
 
   result:
     build: ./result
-    # Use the 'start' script which now includes -r ./otel.js
     command: npm start
     depends_on:
       db:
@@ -43,15 +42,13 @@ services:
     volumes:
       - ./result:/usr/local/app
     environment:
-      OTEL_SERVICE_NAME: result-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318/v1/traces"
-
+      - OTEL_SERVICE_NAME=result-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     ports:
       - "8081:80"
     networks:
       - front-tier
       - back-tier
-
   worker:
     build:
       context: ./worker
@@ -62,16 +59,7 @@ services:
         condition: service_healthy
     environment:
       - OTEL_SERVICE_NAME=worker-service
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf # .NET default
-      # --- The "Magic" Profiler Settings ---
-      - CORECLR_ENABLE_PROFILING=1
-      - CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
-      - OTEL_DOTNET_AUTO_HOME=/otel-dotnet-auto
-      - DOTNET_STARTUP_HOOKS=/otel-dotnet-auto/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
-      - CORECLR_PROFILER_PATH=/otel-dotnet-auto/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
-      - OTEL_DOTNET_AUTO_LOG_LEVEL=debug
-      - OTEL_DOTNET_AUTO_LOG_DIRECTORY=/var/log/opentelemetry
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     networks:
       - back-tier
 

@@ -48,7 +48,9 @@ namespace Worker
                     voteCount++;
                     if (voteCount % 50 == 0)
                     {
-                        _tracerProvider?.ForceFlush(1000);
+                        Console.WriteLine($"[TRACE] Flushing traces... (vote count: {voteCount})");
+                        var flushed = _tracerProvider?.ForceFlush(1000) ?? false;
+                        Console.WriteLine($"[TRACE] Flush result: {(flushed ? "Success" : "Failed")}");
                     }
 
                     // Reconnect redis if down
@@ -116,7 +118,7 @@ namespace Worker
         {
             // Get configuration from environment variables
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") 
-                ?? "http://otel-collector:4318";
+                ?? "http://otel-collector:4318/v1/traces";
             var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") 
                 ?? "worker-service";
 
@@ -127,6 +129,7 @@ namespace Worker
             _activitySource = new ActivitySource("Worker.Service");
 
             // Create and configure the TracerProvider
+            // Let OTEL_EXPORTER_OTLP_* environment variables configure the exporter
             _tracerProvider = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(ResourceBuilder.CreateDefault()
                     .AddService(serviceName))
@@ -139,6 +142,7 @@ namespace Worker
                 .Build();
 
             Console.WriteLine("[OpenTelemetry] Initialization complete");
+            Console.WriteLine($"[OpenTelemetry] Reading endpoint from env: OTEL_EXPORTER_OTLP_ENDPOINT={otlpEndpoint}");
         }
 
         private static NpgsqlConnection OpenDbConnection(string connectionString)
