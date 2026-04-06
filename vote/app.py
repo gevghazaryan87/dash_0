@@ -6,6 +6,8 @@ import random
 import json
 import logging
 
+from opentelemetry import trace
+
 option_a = os.getenv('OPTION_A', "Barca")
 option_b = os.getenv('OPTION_B', "Real Madrid")
 hostname = socket.gethostname()
@@ -33,7 +35,13 @@ def hello():
         redis = get_redis()
         vote = request.form['vote']
         app.logger.info('Received vote for %s', vote)
-        data = json.dumps({'voter_id': voter_id, 'vote': vote})
+
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        traceparent = f"00-{ctx.trace_id:032x}-{ctx.span_id:016x}-{ctx.trace_flags:02x}"
+
+        
+        data = json.dumps({'voter_id': voter_id, 'vote': vote, 'traceparent': traceparent})
         redis.rpush('votes', data)
 
     resp = make_response(render_template(

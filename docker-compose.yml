@@ -134,9 +134,28 @@ services:
     networks:
       - back-tier
 
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      # Optional: Makes it easier to develop by skipping the login screen
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - back-tier
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
 volumes:
   db-data:
   clickhouse-data:
+  grafana-storage:
 
 
 networks:

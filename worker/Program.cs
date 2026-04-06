@@ -13,6 +13,8 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
 
+
+
 namespace Worker
 {
     public class Program
@@ -36,7 +38,7 @@ namespace Worker
                 var keepAliveCommand = pgsql.CreateCommand();
                 keepAliveCommand.CommandText = "SELECT 1";
 
-                var definition = new { vote = "", voter_id = "" };
+                var definition = new { vote = "", voter_id = "", traceparent = "" };
                 int voteCount = 0;
 
                 while (true)
@@ -62,17 +64,44 @@ namespace Worker
                     }
 
                     string json = redis.ListLeftPopAsync("votes").Result;
+                    
                     if (json != null)
                     {
                         var vote = JsonConvert.DeserializeAnonymousType(json, definition);
-                        Console.WriteLine($"Processing vote for '{vote.vote}' by '{vote.voter_id}'");
+                        var traceparent = vote.traceparent;
 
-                        // Create a span for vote processing
-                        using (var activity = _activitySource.StartActivity("ProcessVote"))
+                        Console.WriteLine($"Processing vote for '{vote.vote}' by '{vote.voter_id}'");
+                        Console.WriteLine($"Traceparent: {traceparent}");
+
+                        // Parse W3C traceparent format: 00-trace_id-span_id-trace_flags
+                        var parts = traceparent.Split('-');
+                        var traceIdString = parts[1];
+                        var spanIdString = parts[2];
+                        var traceFlagsString = parts[3];
+
+                        // Convert to ActivityTraceId and ActivitySpanId
+                        var traceIdActivityTrace = ActivityTraceId.CreateFromString(traceIdString.AsSpan());
+                        var spanIdActivitySpan = ActivitySpanId.CreateFromString(spanIdString.AsSpan());
+                        var traceFlags = byte.Parse(traceFlagsString, System.Globalization.NumberStyles.HexNumber);
+
+                        // Create parent context from vote-service trace
+                        var parentContext = new ActivityContext(
+                            traceId: traceIdActivityTrace,
+                            spanId: spanIdActivitySpan,
+                            traceFlags: (ActivityTraceFlags)traceFlags,
+                            isRemote: true
+                        );
+
+                        // Create a span for vote processing LINKED to parent trace
+                        using (var activity = _activitySource.StartActivity(
+                            "ProcessVote", 
+                            ActivityKind.Internal, 
+                            parentContext))
                         {
                             if (activity != null)
                             {
                                 Console.WriteLine($"[TRACE] Created span: {activity.Id}");
+                                Console.WriteLine($"[TRACE] Linked to trace: {activity.Context.TraceId}");
                                 activity.SetTag("vote.option", vote.vote);
                                 activity.SetTag("vote.voter_id", vote.voter_id);
 
