@@ -1,18 +1,30 @@
 'use strict';
 
 const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { SimpleSpanProcessor, ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
+const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 
-// Configure the exporter
+// Configure the trace exporter
 const traceExporter = new OTLPTraceExporter({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318/v1/traces',
+});
+
+// Configure the metric exporter
+const metricExporter = new OTLPMetricExporter({
+    url: process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || 'http://otel-collector:4318/v1/metrics',
+});
+
+const metricReader = new PeriodicExportingMetricReader({
+    exporter: metricExporter,
+    exportIntervalMillis: 10000,
 });
 
 // Initialize the SDK
 const sdk = new NodeSDK({
     traceExporter,
+    metricReader,
     instrumentations: [getNodeAutoInstrumentations()],
     serviceName: process.env.OTEL_SERVICE_NAME || 'result-service',
 });

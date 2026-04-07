@@ -18,6 +18,15 @@ receivers:
     # This block is the specific fix for the SSL error in your logs
     tls:
       insecure: true
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 20s
+    timeout: 20s
+    metrics:
+      container.cpu.usage.total:
+        enabled: true
+      container.memory.usage.total:
+        enabled: true
 
 exporters:
   # This replaces the otlp_http block
@@ -45,7 +54,6 @@ service:
       # Tell the pipeline to use the clickhouse exporter
       exporters: [clickhouse, debug]
     metrics:
-      receivers: [otlp, redis, postgresql]
+      receivers: [otlp, redis, postgresql, docker_stats]
       processors: [batch]
       exporters: [clickhouse, debug]
-      

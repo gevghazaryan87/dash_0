@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -11,6 +13,7 @@ using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 using StackExchange.Redis;
 
 
@@ -21,6 +24,9 @@ namespace Worker
     {
         private static ActivitySource _activitySource;
         private static TracerProvider _tracerProvider;
+        private static MeterProvider _meterProvider;
+        private static Meter _meter;
+        private static Counter<int> _voteCounter;
 
         public static int Main(string[] args)
         {
@@ -116,6 +122,10 @@ namespace Worker
                                     // Normal +1 vote requested
                                     UpdateVote(pgsql, vote.voter_id, vote.vote);
                                     activity.SetTag("vote.success", true);
+                                    
+                                    // Increment custom meter
+                                    _voteCounter?.Add(1, new KeyValuePair<string, object>("vote.option", vote.vote));
+                                    Console.WriteLine($"[METRIC] Incremented vote counter for {vote.vote}");
                                 }
                             }
                             else
@@ -137,9 +147,11 @@ namespace Worker
             }
             finally
             {
-                // Flush and dispose of the TracerProvider to ensure all traces are sent
+                // Flush and dispose of the Providers to ensure all data is sent
                 _tracerProvider?.ForceFlush(5000);
                 _tracerProvider?.Dispose();
+                _meterProvider?.ForceFlush(5000);
+                _meterProvider?.Dispose();
             }
         }
 
@@ -147,7 +159,7 @@ namespace Worker
         {
             // Get configuration from environment variables
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") 
-                ?? "http://otel-collector:4318/v1/traces";
+                ?? "http://otel-collector:4317";
             var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") 
                 ?? "worker-service";
 
@@ -158,7 +170,6 @@ namespace Worker
             _activitySource = new ActivitySource("Worker.Service");
 
             // Create and configure the TracerProvider
-            // Let OTEL_EXPORTER_OTLP_* environment variables configure the exporter
             _tracerProvider = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(ResourceBuilder.CreateDefault()
                     .AddService(serviceName))
@@ -166,12 +177,30 @@ namespace Worker
                 .AddOtlpExporter(options =>
                 {
                     options.Endpoint = new Uri(otlpEndpoint);
-                    options.Protocol = OtlpExportProtocol.HttpProtobuf;
+                    options.Protocol = OtlpExportProtocol.Grpc;
+                })
+                .Build();
+
+            // Create and configure the MeterProvider
+            _meter = new Meter("Worker.Service");
+            _voteCounter = _meter.CreateCounter<int>("worker.votes.processed", "ea", "Number of votes processed by the worker");
+
+            _meterProvider = Sdk.CreateMeterProviderBuilder()
+                .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                    .AddService(serviceName))
+                .AddMeter("Worker.Service")
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation()
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = new Uri(otlpEndpoint);
+                    options.Protocol = OtlpExportProtocol.Grpc;
                 })
                 .Build();
 
             Console.WriteLine("[OpenTelemetry] Initialization complete");
             Console.WriteLine($"[OpenTelemetry] Reading endpoint from env: OTEL_EXPORTER_OTLP_ENDPOINT={otlpEndpoint}");
+            Console.WriteLine($"[OpenTelemetry] Metrics endpoint: {otlpEndpoint}/v1/metrics");
         }
 
         private static NpgsqlConnection OpenDbConnection(string connectionString)

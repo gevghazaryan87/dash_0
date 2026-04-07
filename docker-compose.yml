@@ -22,6 +22,7 @@ services:
       - OTEL_SERVICE_NAME=vote-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf # Add this line
+      - OTEL_METRICS_EXPORTER=otlp
       - OTEL_PYTHON_FLASK_EXCLUDED_URLS=health,static
       # Optional: captures the actual SQL/Redis queries in the spans
       - OTEL_PYTHON_INSTRUMENTATION_HTTP_CAPTURE_HEADERS=server_request
@@ -30,6 +31,11 @@ services:
     networks:
       - front-tier
       - back-tier
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   result:
     build: ./result
@@ -44,6 +50,8 @@ services:
     environment:
       - OTEL_SERVICE_NAME=result-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://otel-collector:4318/v1/metrics
+      - OTEL_METRICS_EXPORTER=otlp
     ports:
       - "8081:80"
     networks:
@@ -59,12 +67,18 @@ services:
         condition: service_healthy
     environment:
       - OTEL_SERVICE_NAME=worker-service
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_METRICS_EXPORTER=otlp
     networks:
       - back-tier
 
   redis:
     image: redis:alpine
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
       interval: "5s"
@@ -87,12 +101,14 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
+    user: '0:0' # Needed to read /var/run/docker.sock
     command: [ "--config", "/etc/otel/otel-collector-config.yaml" ]
     ports:
       - "4317:4317"
       - "4318:4318"
     volumes:
       - "./otel/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     depends_on:
       clickhouse:
         condition: service_healthy
